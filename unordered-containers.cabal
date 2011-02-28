@@ -23,17 +23,10 @@ Extra-source-files:
   tests/Properties.hs, benchmarks/Benchmarks.hs benchmarks/Makefile
   benchmarks/Util/*.hs
 
-Flag Debug
-  Description: Enable debug support
-  Default: False
-
 library
   exposed-modules:
     Data.HashMap.Lazy
     Data.HashMap.Strict
-  if flag(debug)
-    exposed-modules: Data.HashMap.Debug
-        
 
   build-depends:
     base < 4.4,
