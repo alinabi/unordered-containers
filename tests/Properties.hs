@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+ {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- | Tests for the 'Data.HashMap.Lazy' module.  We test functions by
 -- comparing them to a simpler model, an association list.
@@ -11,7 +11,7 @@ import Data.Hashable (Hashable(hash))
 import qualified Data.List as L
 import qualified Data.HashMap.Lazy as M
 import Test.QuickCheck (Arbitrary)
-import Test.Framework (Test, defaultMain)
+import Test.Framework (Test, defaultMain, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 
 -- Key type that generates more hash collisions.
@@ -99,30 +99,34 @@ tests :: [Test]
 tests =
     [
     -- Instances
-      testProperty "==" pEq
-    , testProperty "/=" pNeq
-    , testProperty "Functor" pFunctor
-    , testProperty "Foldable" pFoldable
-
+      testGroup "instances"
+      [ testProperty "==" pEq
+      , testProperty "/=" pNeq
+      , testProperty "Functor" pFunctor
+      , testProperty "Foldable" pFoldable
+      ]
     -- Basic interface
-    , testProperty "size" pSize
-    , testProperty "lookup" pLookup
-    , testProperty "insert" pInsert
-    , testProperty "delete" pDelete
-    , testProperty "insertWith" pInsertWith
-
+    , testGroup "basic interface"
+      [ testProperty "size" pSize
+      , testProperty "lookup" pLookup
+      , testProperty "insert" pInsert
+      , testProperty "delete" pDelete
+      , testProperty "insertWith" pInsertWith
+      ]
     -- Transformations
     , testProperty "map" pMap
-
     -- Folds
-    , testProperty "foldr" pFoldr
-    , testProperty "foldrWithKey" pFoldrWithKey
-    , testProperty "foldl'" pFoldl'
-
+    , testGroup "folds"
+      [ testProperty "foldr" pFoldr
+      , testProperty "foldrWithKey" pFoldrWithKey
+      , testProperty "foldl'" pFoldl'
+      ]
     -- Conversions
-    , testProperty "elems" pElems
-    , testProperty "keys" pKeys
-    , testProperty "toList" pToList
+    , testGroup "conversions"
+      [ testProperty "elems" pElems
+      , testProperty "keys" pKeys
+      , testProperty "toList" pToList
+      ]
     ]
 
 ------------------------------------------------------------------------
