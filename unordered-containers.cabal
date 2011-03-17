@@ -1,5 +1,5 @@
 name:           unordered-containers
-version:        0.1.0.1
+version:        0.1.2.0
 synopsis:       Efficient hashing-based container types
 description:
   Efficient hashing-based container types.  The containers have been
@@ -37,6 +37,8 @@ library
     Data.FullList.Lazy
     Data.FullList.Strict
     Data.HashMap.Common
+    Data.HashMap.Lazy.Internal
+    Data.HashMap.Strict.Internal
 
   ghc-options: -Wall -O2
   if impl(ghc >= 6.8)
