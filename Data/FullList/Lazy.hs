@@ -20,6 +20,7 @@ module Data.FullList.Lazy
     , size
     , singleton
     , lookup
+    , lookupL
     , insert
     , delete
     , insertWith

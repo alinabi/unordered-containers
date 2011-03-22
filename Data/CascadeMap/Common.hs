@@ -10,51 +10,49 @@ import Data.Hashable
 import qualified Data.FullList.Lazy as FL
 import Prelude hiding ( lookup )
 
-type Hash = Int
+type Path = Int
 
-data Quad k v = Quad {-# UNPACK #-} !(Bucket k v)
+data Octo k v = Octo {-# UNPACK #-} !(Bucket k v)
                      {-# UNPACK #-} !(Bucket k v)
                      {-# UNPACK #-} !(Bucket k v)
                      {-# UNPACK #-} !(Bucket k v)
+                     {-# UNPACK #-} !(Bucket k v)
+                     {-# UNPACK #-} !(Bucket k v)
+                     {-# UNPACK #-} !(Bucket k v)
+                     {-# UNPACK #-} !(Bucket k v)
+
+set :: Octo k v -> Path -> Bucket k v -> Octo k v
+set (Octo a b c d e f g h) n x = case n .&. 0x7 of
+    0x0 -> Octo x b c d e f g h
+    0x1 -> Octo a x c d e f g h
+    0x2 -> Octo a b x d e f g h
+    0x3 -> Octo a b c x e f g h
+    0x4 -> Octo a b c d x f g h
+    0x5 -> Octo a b c d e x g h
+    0x6 -> Octo a b c d e f x h
+    _   -> Octo a b c x e f g x
+{-# INLINE set #-}
+
+get :: Octo k v -> Path -> Bucket k v
+get (Octo a b c d e f g h) n = case n .&. 0x7 of
+    0x0 -> a
+    0x1 -> b
+    0x2 -> c
+    0x3 -> d
+    0x4 -> e
+    0x5 -> f
+    0x6 -> g
+    _   -> h
+{-# INLINE get #-}
  
-data Octo k v = Octo {-# UNPACK #-} !(Quad k v) {-# UNPACK #-} !(Quad k v)
+data Bucket k v = Bucket {-# UNPACK #-} !Path !(FL.List k v)
 
-data Bucket k v = Bucket {-# UNPACK #-} !Hash !(FL.FullList k v)
-
-lookupB :: Eq k => Hash -> k -> Bucket k v -> Maybe v
+lookupB :: Eq k => Path -> k -> Bucket k v -> Maybe v
 lookupB !h k (Bucket h' fl)
     | h' /= h   = Nothing
-    | otherwise = FL.lookup k fl
+    | otherwise = FL.lookupL k fl
 {-# INLINE lookupB #-}
 
-
-class Table t where
-    set :: t k v -> Int -> Bucket k v -> t k v
-    get :: t k v -> Int -> Bucket k v
-
-instance Table Quad where
-    set (Quad a b c d) n x = case n .&. 0x03 of
-        0x00 -> Quad x b c d
-        0x01 -> Quad a x c d
-        0x02 -> Quad a b x d
-        _    -> Quad a b c x
-    {-# INLINE set #-}
-    get (Quad a b c d) n = case n .&. 0x03 of
-        0x00 -> a
-        0x01 -> b
-        0x02 -> c
-        _    -> d
-    {-# INLINE get #-}
-
-instance Table Octo where
-    set (Octo a b) n x = case n .&. 0x04 of
-        0x00 -> Octo (set a n x) b
-        _    -> Octo a (set b n x)
-    {-# INLINE set #-}
-    get (Octo a b) n = case n .&. 0x04 of
-        0x00 -> get a n
-        _    -> get b n
-    {-# INLINE get #-}
 
 data Map k v = Empty
              | Tip {-# UNPACK #-} !(Octo k v)
@@ -72,13 +70,42 @@ null _     = False
 lookup :: (Eq k, Hashable k) => k -> Map k v -> Maybe v
 lookup k m = go h m where
     !h = hash k
-    go !s Empty = Nothing
-    go !s (Tip o) = lookupB h k (o `get` s)
-    go !s (Bin o l r) = case lookupB h k (o `get` s) of
-        Nothing -> case s .&. 0x08 of
-            0 -> go (s `shiftR` 4) l
-            _ -> go (s `shiftR` 4) r  
+    go !p Empty = Nothing
+    go !p (Tip o) = lookupB h k (o `get` p)
+    go !p (Bin o l r) = case lookupB h k (o `get` p) of
+        Nothing -> case fork p of
+            0 -> go (advance p) l
+            _ -> go (advance p) r  
         just -> just
 #if __GLASGOW_HASKELL__ >= 700
 {-# INLINABLE lookup #-}
 #endif
+
+delete :: (Eq k, Hashable k) => k -> Map k v -> Map k v
+delete k m =
+    let !h = hash k
+        go !_ Empty = Nothing
+        go !p (Tip o) = Tip o' where 
+            b  = deleteB h k (o `get` p)
+            o' = set o p b  
+        go !p (Bin o l r)
+    in
+        case go h m of
+            Nothing -> m
+            Just m' -> m'
+#if __GLASGOW_HASKELL__ >= 700
+{-# INLINABLE delete #-}
+#endif
+
+
+-- 
+-- utility functions
+--
+
+advance :: Path -> Path
+advance !p = p `shiftR` 4
+{-# INLINE advance #-}
+
+fork :: Path -> Int
+fork !p = p .&. 0x8
+{-# INLINE fork #-}
