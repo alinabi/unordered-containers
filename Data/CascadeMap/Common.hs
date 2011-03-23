@@ -23,6 +23,11 @@ data Octo k v = Octo {-# UNPACK #-} !(Bucket k v)
                      {-# UNPACK #-} !(Bucket k v)
                      {-# UNPACK #-} !(Bucket k v)
 
+emptyO :: Octo k v
+emptyO = Octo b b b b b b b b where
+    b = Bucket 0 FL.Nil
+{-# NOINLINE emptyO #-}
+
 set :: Octo k v -> Path -> Bucket k v -> Octo k v
 set (Octo a b c d e f g h) n x = case n .&. 0x7 of
     0x0 -> Octo x b c d e f g h
@@ -49,22 +54,26 @@ get (Octo a b c d e f g h) n = case n .&. 0x7 of
  
 data Bucket k v = Bucket {-# UNPACK #-} !Path !(FL.List k v)
 
+singletonB :: Path -> k -> v -> Bucket k v
+singletonB h k v = Bucket h . FL.Cons k v $ FL.Nil
+{-# INLINE singletonB #-}
+
 lookupB :: Eq k => Path -> k -> Bucket k v -> Maybe v
 lookupB !h k (Bucket h' l) = go h' l where
-    go x | x /= h    = Nothing
-         | otherwise = FL.lookupL k
+    go x ps | x /= h    = Nothing
+            | otherwise = FL.lookupL k ps
 {-# INLINE lookupB #-}
 
 deleteB :: Eq k => Path -> k -> Bucket k v -> Either (Bucket k v) (Bucket k v)
 deleteB !h k b@(Bucket h' l) = go h' l where
-    go x | x /= h    = Left b
-         | otherwise = Right . Bucket h' . FL.deleteL k
+    go x ps | x /= h    = Left b
+            | otherwise = Right . Bucket h' . FL.deleteL k $ ps
 {-# INLINE deleteB #-}
 
 insertB :: Eq k => Path -> k -> v -> Bucket k v -> Either (Bucket k v) (Bucket k v)
 insertB h k v b@(Bucket h' l) = go h' l where
-    go x | x /= h    = Left b
-         | otherwise = Right . Bucket h' . FL.insertL k v 
+    go x ps | x /= h    = Left b
+            | otherwise = Right . Bucket h' . FL.insertL k v $ ps
 {-# INLINE insertB #-}
 
 
@@ -116,13 +125,13 @@ insert k v m = go (bitSize h) h m where
     !h = hash k
     go 0 _ m = m
     go !_ !p Empty = Tip $ set emptyO p (singletonB h k v)
-    go !n !h (Tip o) = case insertB h k v $ o `get` p of
+    go !n !p (Tip o) = case insertB h k v $ o `get` p of
         Right b -> Tip $ set o p b
         Left  _ -> let x = go (n-4) (advance p) Empty in
             case fork p of
                 0 -> Bin o x Empty
                 _ -> Bin o Empty x
-    go !n !h (Bin o l r) = case insertB h k v $ o `get` p of
+    go !n !p (Bin o l r) = case insertB h k v $ o `get` p of
         Right b -> Bin (set o p b) l r
         Left  _ -> case fork p of
             0 -> let l' = go (n-4) (advance p) l in Bin o l' r
