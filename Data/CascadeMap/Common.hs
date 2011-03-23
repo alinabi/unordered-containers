@@ -3,9 +3,11 @@
 module Data.CascadeMap.Common 
     ( Map
     , lookup
+    , insert
+    , delete
     ) where
 
-import Data.Bits ( (.&.), shiftR )
+import Data.Bits ( (.&.), shiftR, bitSize )
 import Data.Hashable
 import qualified Data.FullList.Lazy as FL
 import Prelude hiding ( lookup )
@@ -48,10 +50,22 @@ get (Octo a b c d e f g h) n = case n .&. 0x7 of
 data Bucket k v = Bucket {-# UNPACK #-} !Path !(FL.List k v)
 
 lookupB :: Eq k => Path -> k -> Bucket k v -> Maybe v
-lookupB !h k (Bucket h' fl)
-    | h' /= h   = Nothing
-    | otherwise = FL.lookupL k fl
+lookupB !h k (Bucket h' l) = go h' l where
+    go x | x /= h    = Nothing
+         | otherwise = FL.lookupL k
 {-# INLINE lookupB #-}
+
+deleteB :: Eq k => Path -> k -> Bucket k v -> Either (Bucket k v) (Bucket k v)
+deleteB !h k b@(Bucket h' l) = go h' l where
+    go x | x /= h    = Left b
+         | otherwise = Right . Bucket h' . FL.deleteL k
+{-# INLINE deleteB #-}
+
+insertB :: Eq k => Path -> k -> v -> Bucket k v -> Either (Bucket k v) (Bucket k v)
+insertB h k v b@(Bucket h' l) = go h' l where
+    go x | x /= h    = Left b
+         | otherwise = Right . Bucket h' . FL.insertL k v 
+{-# INLINE insertB #-}
 
 
 data Map k v = Empty
@@ -82,19 +96,39 @@ lookup k m = go h m where
 #endif
 
 delete :: (Eq k, Hashable k) => k -> Map k v -> Map k v
-delete k m =
-    let !h = hash k
-        go !_ Empty = Nothing
-        go !p (Tip o) = Tip o' where 
-            b  = deleteB h k (o `get` p)
-            o' = set o p b  
-        go !p (Bin o l r)
-    in
-        case go h m of
-            Nothing -> m
-            Just m' -> m'
+delete k m = go h m where
+    !h = hash k
+    go !_ Empty = Empty
+    go !p m@(Tip o) = case deleteB h k $ o `get` p of
+        Left  _ -> m
+        Right b -> Tip $ set o p b
+    go !p (Bin o l r) = case deleteB h k $ o `get` p of
+        Right b -> Bin (set o p b) l r
+        Left  _ -> case fork p of
+            0 -> let l' = go (advance p) l in Bin o l' r
+            _ -> let r' = go (advance p) r in Bin o l r' 
 #if __GLASGOW_HASKELL__ >= 700
 {-# INLINABLE delete #-}
+#endif
+
+insert :: (Eq k, Hashable k) => k -> v -> Map k v -> Map k v
+insert k v m = go (bitSize h) h m where
+    !h = hash k
+    go 0 _ m = m
+    go !_ !p Empty = Tip $ set emptyO p (singletonB h k v)
+    go !n !h (Tip o) = case insertB h k v $ o `get` p of
+        Right b -> Tip $ set o p b
+        Left  _ -> let x = go (n-4) (advance p) Empty in
+            case fork p of
+                0 -> Bin o x Empty
+                _ -> Bin o Empty x
+    go !n !h (Bin o l r) = case insertB h k v $ o `get` p of
+        Right b -> Bin (set o p b) l r
+        Left  _ -> case fork p of
+            0 -> let l' = go (n-4) (advance p) l in Bin o l' r
+            _ -> let r' = go (n-4) (advance p) r in Bin o l r'
+#if __GLASGOW_HASKELL__ >= 700
+{-# INLINABLE insert #-}
 #endif
 
 

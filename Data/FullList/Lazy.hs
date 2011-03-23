@@ -22,7 +22,9 @@ module Data.FullList.Lazy
     , lookup
     , lookupL
     , insert
+    , insertL
     , delete
+    , deleteL
     , insertWith
     , adjust
 
